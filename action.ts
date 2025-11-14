@@ -52,7 +52,7 @@ const calculateIterations = (
   checkIntervalInMilliseconds: number
 ) => Math.floor(maxTimeoutSec / (checkIntervalInMilliseconds / 1000));
 
-const wait = (ms: number): Promise<void> =>
+const wait = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 const waitForUrl = async ({
@@ -62,7 +62,7 @@ const waitForUrl = async ({
   vercelPassword,
   protectionBypassHeader,
   path,
-}: WaitForUrlOptions): Promise<void> => {
+}: WaitForUrlOptions) => {
   const iterations = calculateIterations(
     maxTimeout,
     checkIntervalInMilliseconds
@@ -255,10 +255,7 @@ const waitForDeploymentToStart = async ({
   actorName = 'vercel[bot]',
   maxTimeout = 20,
   checkIntervalInMilliseconds = 2000,
-}: WaitForDeploymentToStartOptions): Promise<{
-  id: number;
-  creator: { login: string } | null;
-} | null> => {
+}: WaitForDeploymentToStartOptions) => {
   const iterations = calculateIterations(
     maxTimeout,
     checkIntervalInMilliseconds
@@ -279,8 +276,8 @@ const waitForDeploymentToStart = async ({
           return deployment.creator?.login === actorName;
         });
 
-      if (deployment && deployment.creator) {
-        return deployment as { id: number; creator: { login: string } };
+      if (deployment) {
+        return deployment;
       }
 
       console.log(
@@ -307,7 +304,7 @@ async function getShaForPullRequest({
   owner,
   repo,
   number,
-}: GetShaForPullRequestOptions): Promise<string | undefined> {
+}: GetShaForPullRequestOptions) {
   const PR_NUMBER = github.context.payload.pull_request?.number;
 
   if (!PR_NUMBER) {
@@ -333,7 +330,7 @@ async function getShaForPullRequest({
   return prSHA;
 }
 
-export const run = async (): Promise<void> => {
+export const run = async () => {
   try {
     // Inputs
     const GITHUB_TOKEN = core.getInput('token', { required: true });
