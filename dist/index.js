@@ -37584,13 +37584,14 @@ class StatusError extends Error {
  * Accounts for race conditions where this action starts
  * before the actor's action has started.
  */
-const waitForDeploymentToStart = async ({ octokit, owner, repo, sha, environment, actorName = 'vercel[bot]', maxTimeout = 20, checkIntervalInMilliseconds = 2000, }) => {
+const waitForDeploymentToStart = async ({ octokit, owner, repo, sha, branch, environment, actorName = 'vercel[bot]', maxTimeout = 20, checkIntervalInMilliseconds = 2000, }) => {
     const iterations = calculateIterations(maxTimeout, checkIntervalInMilliseconds);
     for (let i = 0; i < iterations; i++) {
         try {
             const deployments = await octokit.rest.repos.listDeployments({
                 owner,
                 repo,
+                ref: branch,
                 sha,
                 environment,
             });
@@ -37598,7 +37599,7 @@ const waitForDeploymentToStart = async ({ octokit, owner, repo, sha, environment
                 deployments.data.find((deployment) => {
                     return deployment.creator?.login === actorName;
                 });
-            if (deployment && deployment.creator) {
+            if (deployment) {
                 return deployment;
             }
             console.log(`Could not find any deployments for actor ${actorName}, retrying (attempt ${i + 1} / ${iterations})`);
@@ -37611,7 +37612,7 @@ const waitForDeploymentToStart = async ({ octokit, owner, repo, sha, environment
     }
     return null;
 };
-async function getShaForPullRequest({ octokit, owner, repo, number, }) {
+async function getShaAndBranchForPullRequest({ octokit, owner, repo, number, }) {
     const PR_NUMBER = github.context.payload.pull_request?.number;
     if (!PR_NUMBER) {
         core.setFailed('No pull request number was found');
@@ -37629,7 +37630,11 @@ async function getShaForPullRequest({ octokit, owner, repo, number, }) {
     }
     // Get Ref from pull request
     const prSHA = currentPR.data.head.sha;
-    return prSHA;
+    const prBranch = currentPR.data.head.ref;
+    return {
+        sha: prSHA,
+        branch: prBranch,
+    };
 }
 const run = async () => {
     try {
@@ -37652,19 +37657,26 @@ const run = async () => {
         const owner = context.repo.owner;
         const repo = context.repo.repo;
         let sha;
+        let branch;
         if (github.context.payload && github.context.payload.pull_request) {
-            sha = await getShaForPullRequest({
+            ({ sha, branch } = (await getShaAndBranchForPullRequest({
                 octokit,
                 owner,
                 repo,
                 number: github.context.payload.pull_request.number,
-            });
+            })) || {});
         }
         else if (github.context.sha) {
             sha = github.context.sha;
+            branch = github.context.ref;
         }
+        branch = branch?.replace('refs/heads/', '');
         if (!sha) {
             core.setFailed('Unable to determine SHA. Exiting...');
+            return;
+        }
+        if (!branch) {
+            core.setFailed('Unable to determine branch. Exiting...');
             return;
         }
         // Get deployments associated with the pull request.
@@ -37672,7 +37684,8 @@ const run = async () => {
             octokit,
             owner,
             repo,
-            sha: sha,
+            sha,
+            branch,
             environment: ENVIRONMENT,
             actorName: 'vercel[bot]',
             maxTimeout: MAX_TIMEOUT,
