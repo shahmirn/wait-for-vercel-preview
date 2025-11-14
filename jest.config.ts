@@ -10,7 +10,7 @@ const config: Config = {
     '^.+\\.(ts|js)$': 'ts-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(msw|@mswjs|until-async)/)',
+    'node_modules/(?!(until-async)/)',
   ],
   moduleFileExtensions: ['ts', 'js', 'json'],
 };
