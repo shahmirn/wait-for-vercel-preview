@@ -34,6 +34,7 @@ interface WaitForDeploymentToStartOptions {
   owner: string;
   repo: string;
   sha: string;
+  branch: string;
   environment?: string;
   actorName?: string;
   maxTimeout?: number;
@@ -251,6 +252,7 @@ const waitForDeploymentToStart = async ({
   owner,
   repo,
   sha,
+  branch,
   environment,
   actorName = 'vercel[bot]',
   maxTimeout = 20,
@@ -266,6 +268,7 @@ const waitForDeploymentToStart = async ({
       const deployments = await octokit.rest.repos.listDeployments({
         owner,
         repo,
+        ref: branch,
         sha,
         environment,
       });
@@ -299,7 +302,7 @@ const waitForDeploymentToStart = async ({
   return null;
 };
 
-async function getShaForPullRequest({
+async function getShaAndBranchForPullRequest({
   octokit,
   owner,
   repo,
@@ -326,8 +329,12 @@ async function getShaForPullRequest({
 
   // Get Ref from pull request
   const prSHA = currentPR.data.head.sha;
+  const prBranch = currentPR.data.head.ref;
 
-  return prSHA;
+  return {
+    sha: prSHA,
+    branch: prBranch,
+  };
 }
 
 export const run = async () => {
@@ -358,20 +365,27 @@ export const run = async () => {
     const repo = context.repo.repo;
 
     let sha: string | undefined;
+    let branch: string | undefined;
 
     if (github.context.payload && github.context.payload.pull_request) {
-      sha = await getShaForPullRequest({
+      ({ sha, branch } = (await getShaAndBranchForPullRequest({
         octokit,
         owner,
         repo,
         number: github.context.payload.pull_request.number,
-      });
+      })) || {});
     } else if (github.context.sha) {
       sha = github.context.sha;
+      branch = github.context.ref;
     }
+    branch = branch?.replace('refs/heads/', '');
 
     if (!sha) {
       core.setFailed('Unable to determine SHA. Exiting...');
+      return;
+    }
+    if (!branch) {
+      core.setFailed('Unable to determine branch. Exiting...');
       return;
     }
 
@@ -380,7 +394,8 @@ export const run = async () => {
       octokit,
       owner,
       repo,
-      sha: sha,
+      sha,
+      branch,
       environment: ENVIRONMENT,
       actorName: 'vercel[bot]',
       maxTimeout: MAX_TIMEOUT,
