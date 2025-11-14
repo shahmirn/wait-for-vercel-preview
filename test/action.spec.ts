@@ -1,8 +1,8 @@
-const { run } = require('../action');
-const core = require('@actions/core');
-const github = require('@actions/github');
-const { server, rest } = require('./support/server');
-const deepmerge = require('deepmerge');
+import { run } from '../action';
+import * as core from '@actions/core';
+import * as github from '@actions/github';
+import { server, http, HttpResponse, type JsonBodyType } from './support/server';
+import deepmerge from 'deepmerge';
 
 jest.setTimeout(20000);
 
@@ -15,19 +15,24 @@ jest.mock('@actions/core', () => {
   };
 });
 
+// Create a mutable context object that can be modified in tests
+const mockContext = {
+  owner: 'test-owner',
+  repo: 'test-repo',
+  payload: {
+    pull_request: {
+      number: 99,
+    },
+  },
+};
+
 jest.mock('@actions/github', () => {
   const original = jest.requireActual('@actions/github');
 
   return {
     getOctokit: original.getOctokit,
-    context: {
-      owner: 'test-owner',
-      repo: 'test-repo',
-      payload: {
-        pull_request: {
-          number: 99,
-        },
-      },
+    get context() {
+      return mockContext;
     },
   };
 });
@@ -58,7 +63,7 @@ describe('wait for vercel preview', () => {
       setGithubContext({
         payload: {
           pull_request: {
-            number: undefined,
+            number: undefined as unknown as number,
           },
         },
       });
@@ -272,12 +277,13 @@ describe('wait for vercel preview', () => {
     ]);
 
     server.use(
-      rest.post('https://my-preview.vercel.app/', (req, res, ctx) => {
-        return res(
-          ctx.status(303),
-          ctx.cookie('_vercel_jwt', 'a-super-secret-jwt'),
-          ctx.body('')
-        );
+      http.post('https://my-preview.vercel.app/', ({ request }) => {
+        return HttpResponse.text('', {
+          status: 303,
+          headers: {
+            'Set-Cookie': '_vercel_jwt=a-super-secret-jwt',
+          },
+        });
       })
     );
 
@@ -404,22 +410,20 @@ describe('wait for vercel preview', () => {
   });
 });
 
-/**
- *
- * @param {{
- *  token?: string,
- *  vercel_password?: string;
- *  allow_inactive?: string;
- *  check_interval?: number;
- *  max_timeout?: number;
- *  path?: string;
- *  }} inputs
- */
-function setInputs(inputs = {}) {
+interface SetInputsOptions {
+  token?: string;
+  vercel_password?: string;
+  allow_inactive?: string;
+  check_interval?: number;
+  max_timeout?: number;
+  path?: string;
+}
+
+function setInputs(inputs: SetInputsOptions = {}) {
   const spyGetInput = jest.spyOn(core, 'getInput');
   const spyGetBooleanInput = jest.spyOn(core, 'getBooleanInput');
 
-  spyGetInput.mockImplementation((key) => {
+  spyGetInput.mockImplementation((key: string) => {
     switch (key) {
       case 'token':
         return inputs.token || '';
@@ -436,7 +440,7 @@ function setInputs(inputs = {}) {
     }
   });
 
-  spyGetBooleanInput.mockImplementation((key) => {
+  spyGetBooleanInput.mockImplementation((key: string) => {
     switch (key) {
       case 'allow_inactive':
         return String(inputs.allow_inactive).toLowerCase() === 'true';
@@ -446,7 +450,7 @@ function setInputs(inputs = {}) {
   });
 }
 
-function setGithubContext(ctx) {
+function setGithubContext(ctx: Partial<typeof github.context>) {
   const defaultCtx = {
     eventName: '',
     sha: '',
@@ -476,47 +480,54 @@ function setGithubContext(ctx) {
     },
   };
 
-  // ts-check complains about assigning to a read-only property
-  // @ts-ignore
-  github.context = deepmerge(defaultCtx, ctx);
+  const mergedCtx = deepmerge(defaultCtx, ctx);
+  
+  // Update the mock context object directly
+  Object.assign(mockContext, mergedCtx);
 }
 
-function ghResponse(uri, status, data) {
+function ghResponse(uri: string, status: number, data: JsonBodyType) {
   server.use(
-    rest.get(`https://api.github.com${uri}`, (req, res, ctx) => {
-      return res(ctx.status(status), ctx.json(data));
+    http.get(`https://api.github.com${uri}`, () => {
+      return HttpResponse.json(data, { status });
     })
   );
 }
 
-function ghRespondOnce(uri, status, data) {
+function ghRespondOnce(uri: string, status: number, data: JsonBodyType) {
   return restOnce(`https://api.github.com${uri}`, status, data);
 }
 
-function restOnce(uri, status, data) {
+function restOnce(uri: string, status: number, data: JsonBodyType) {
   server.use(
-    rest.get(uri, (req, res, ctx) => {
-      return res.once(ctx.status(status), ctx.json(data));
-    })
+    http.get(uri, () => {
+      return HttpResponse.json(data, { status });
+    }, { once: true })
   );
 }
 
-function restTimes(uri, payloads) {
+interface RestTimesPayload {
+  status: number;
+  body: JsonBodyType;
+  times: number;
+}
+
+function restTimes(uri: string, payloads: RestTimesPayload[]) {
   let count = 0;
   let cursor = 0;
 
   server.use(
-    rest.get(uri, (req, res, ctx) => {
+    http.get(uri, () => {
       let payload = payloads[cursor];
 
       if (count < payload.times) {
         count = count + 1;
 
         if (typeof payload.body === 'string') {
-          return res(ctx.status(payload.status), ctx.body(payload.body));
+          return HttpResponse.text(payload.body, { status: payload.status });
         }
 
-        return res(ctx.status(payload.status), ctx.json(payload.body));
+        return HttpResponse.json(payload.body, { status: payload.status });
       }
 
       cursor = cursor + 1;
@@ -524,10 +535,10 @@ function restTimes(uri, payloads) {
       payload = payloads[cursor];
 
       if (typeof payload.body === 'string') {
-        return res(ctx.status(payload.status), ctx.body(payload.body));
+        return HttpResponse.text(payload.body, { status: payload.status });
       }
 
-      return res(ctx.status(payload.status), ctx.json(payload.body));
+      return HttpResponse.json(payload.body, { status: payload.status });
     })
   );
 }
@@ -578,3 +589,4 @@ function givenValidGithubResponses() {
     },
   ]);
 }
+
