@@ -50,7 +50,7 @@ describe('wait for vercel preview', () => {
 
       await run();
 
-      expect(core.setFailed).toBeCalledWith(
+      expect(core.setFailed).toHaveBeenCalledWith(
         'Required field `token` was not provided'
       );
     });
@@ -185,8 +185,8 @@ describe('wait for vercel preview', () => {
 
     await run();
 
-    expect(core.setFailed).not.toBeCalled();
-    expect(core.setOutput).toBeCalledWith(
+    expect(core.setFailed).not.toHaveBeenCalled();
+    expect(core.setOutput).toHaveBeenCalledWith(
       'url',
       'https://my-preview.vercel.app/'
     );
@@ -215,8 +215,8 @@ describe('wait for vercel preview', () => {
 
     await run();
 
-    expect(core.setFailed).not.toBeCalled();
-    expect(core.setOutput).toBeCalledWith(
+    expect(core.setFailed).not.toHaveBeenCalled();
+    expect(core.setOutput).toHaveBeenCalledWith(
       'url',
       'https://my-preview.vercel.app/'
     );
@@ -247,8 +247,8 @@ describe('wait for vercel preview', () => {
 
     await run();
 
-    expect(core.setFailed).not.toBeCalled();
-    expect(core.setOutput).toBeCalledWith(
+    expect(core.setFailed).not.toHaveBeenCalled();
+    expect(core.setOutput).toHaveBeenCalledWith(
       'url',
       'https://my-preview.vercel.app/'
     );
@@ -289,7 +289,7 @@ describe('wait for vercel preview', () => {
 
     await run();
 
-    expect(core.setFailed).not.toBeCalled();
+    expect(core.setFailed).not.toHaveBeenCalled();
     expect(core.setOutput).toHaveBeenCalledWith(
       'url',
       'https://my-preview.vercel.app/'

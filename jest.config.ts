@@ -6,9 +6,6 @@ const config: Config = {
   setupFilesAfterEnv: ['./test/support/setupTests.ts'],
   collectCoverageFrom: ['action.ts', 'index.ts'],
   coveragePathIgnorePatterns: ['/node_modules/', '/test/'],
-  moduleNameMapper: {
-    '^axios$': require.resolve('axios'),
-  },
   transform: {
     '^.+\\.(ts|js)$': 'ts-jest',
   },
