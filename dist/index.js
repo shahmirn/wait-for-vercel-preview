@@ -37670,7 +37670,8 @@ const run = async () => {
             sha = github.context.sha;
             branch = github.context.ref;
         }
-        branch = branch?.replace('refs/heads/', '');
+        console.log('sha', sha);
+        console.log('branch', branch);
         if (!sha) {
             core.setFailed('Unable to determine SHA. Exiting...');
             return;
